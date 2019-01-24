@@ -16,6 +16,25 @@
 
 /* Write your solution here */
 
+void fib(int **arr, int count){
+    int *heapAddress = malloc(sizeof(int)*count);
+    if(count == 1){
+        heapAddress[0] = 0;
+        return
+    }
+    if(count == 2){
+        heapAddress[0] = 0;
+        heapAddress[1] = 0;
+        return
+    }
+    heapAddress[0] = 0;
+    heapAddress[1] = 1;
+    for(int i = 3; i < count; i++){
+        heapAddress[i] = heapAddress[i-1] + heapAddress[i-2];
+    }
+    *arr = heapAddress;
+}
+
 
 int main(int argc, char **argv) {
     /* do not change this main function */
