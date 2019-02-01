@@ -20,7 +20,20 @@
 */
 
 // Write the function strip_q_marks here
-
+int strip_q_marks(char *str){
+    int found_non_q = 0;
+    int count = 0;
+    for(int i = strlen(str) - 1; found_non_q == 0 && i >= 0; i--){
+        if (str[i] != '?'){
+            found_non_q = 1;
+        }
+        if (str[i] == '?'){
+            count++;
+            str[i] = '\0';
+        }
+    }
+    return count;
+}
 
 int main(int argc, char **argv) {
     // Do not change this main function.
