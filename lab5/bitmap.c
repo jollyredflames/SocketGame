@@ -43,8 +43,8 @@ struct pixel **read_pixel_array(FILE *image, int pixel_array_offset, int width, 
         for(int j = 0; j < width; j++){
             struct pixel pixTemp;
             fread(&pixTemp.blue, sizeof(unsigned char), 1, image);
-            fread(&pixTemp.red, sizeof(unsigned char), 1, image);
             fread(&pixTemp.green, sizeof(unsigned char), 1, image);
+            fread(&pixTemp.red, sizeof(unsigned char), 1, image);
             ptr[i][j] = pixTemp;
         }
     }
