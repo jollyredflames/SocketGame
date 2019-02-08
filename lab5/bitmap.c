@@ -8,7 +8,12 @@
  * height in the given bitmap file.
  */
 void read_bitmap_metadata(FILE *image, int *pixel_array_offset, int *width, int *height) {
-
+    fseek(image, 10, SEEK_SET);
+    fread(pixel_array_offset, 4, 1, image);
+    fseek(image, 18, SEEK_SET);
+    fread(width, 4, 1, image);
+    fseek(image, 22, SEEK_SET);
+    fread(height, 4, 1, image);
 }
 
 /*
@@ -28,9 +33,23 @@ void read_bitmap_metadata(FILE *image, int *pixel_array_offset, int *width, int 
  * 4. Return the address of the first `struct pixel *` you initialized.
  */
 struct pixel **read_pixel_array(FILE *image, int pixel_array_offset, int width, int height) {
-
+    struct pixel **ptr = malloc(sizeof(struct pixel*)*height);
+    for(int i = 0; i < height; i++){
+        ptr[i] = malloc(sizeof(struct pixel)*width);
+    }
+    fseek(image, pixel_array_offset, SEEK_SET);
+    
+    for(int i = 0; i < height; i++){
+        for(int j = 0; j < width; j++){
+            struct pixel pixTemp;
+            fread(&pixTemp.blue, sizeof(unsigned char), 1, image);
+            fread(&pixTemp.red, sizeof(unsigned char), 1, image);
+            fread(&pixTemp.green, sizeof(unsigned char), 1, image);
+            ptr[i][j] = pixTemp;
+        }
+    }
+    return ptr;
 }
-
 
 /*
  * Print the blue, green, and red colour values of a pixel.
