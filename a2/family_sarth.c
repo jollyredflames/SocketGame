@@ -104,7 +104,7 @@ Family *new_family(char *str) {
             perror("Malloc setting word_ptrs[i] of new_fam failed Line:64 Family.c");
             exit(1);
         }
-        //fam_ptr->word_ptrs[i] = NULL;
+        fam_ptr->word_ptrs[i] = NULL;
     }
     
     fam_ptr->num_words = 0;
@@ -120,21 +120,19 @@ Family *new_family(char *str) {
    more pointers and then add the new pointer.
 */
 void add_word_to_family(Family *fam, char *word) {
-    /**
-    if(fam->num_words > fam->max_words + 1){
+    
+    if(fam->num_words > fam->max_words){
         fprintf(stderr, "fam->numwords should never be greater than max_words+1 ever Line:125 family.c\n");
-        printf("num_words: %i   max_words: %i", fam->num_words, fam->max_words);
-    }**/
-    //printf("\nWord Added: %s\n", word);
+    }
+    
     if(fam->num_words >= fam->max_words){ // ==  + 1
-        fam->word_ptrs = realloc(fam->word_ptrs, sizeof(char*)*(family_increment + fam->max_words));
+        fam->word_ptrs = realloc(fam->word_ptrs, sizeof(fam->word_ptrs) + sizeof(char*)*family_increment); //why sizeof(fam->word_ptrs)?
         if (fam->word_ptrs == NULL){
             perror("Realloc failed while increasing size of word_ptrs line:86 Family.c");
             exit(1);
         }
         
-        //printf("\n\n\n size_word_ptrs: %lu", sizeof(fam->word_ptrs));
-        fam->max_words = fam->max_words + family_increment;
+        fam->max_words = ((int) sizeof(fam->word_ptrs)/sizeof(char*)) - 1;
         //max words will just be max words + family increment if you do it correctly
         
         for(int i = fam->num_words; i < fam->max_words + 1; i++){ //why + 1
@@ -187,38 +185,19 @@ Family *find_family(Family *fam_list, char *sig) {
 Family *find_biggest_family(Family *fam_list) {
     Family *most_words_fam = fam_list;
     int most_words = most_words_fam->num_words;
-    Family *current = fam_list;
-    //printf("\nArrays be like: ");
-    while(current->next != NULL){
-        //printf("(%i, %s)", current->num_words, current->signature);
-        if(current->num_words > most_words){
-            most_words_fam = current;
+    while(fam_list->next != NULL){
+        if(fam_list->num_words > most_words){
+            most_words_fam = fam_list;
             most_words = most_words_fam->num_words;
         }
-        current = current->next;
+        fam_list = fam_list->next;
     }
     if(most_words == 0){
-        //printf("RETURNING NULL");
         return NULL;
     }
-    //printf("\nLOOK AT ME: %i\n", most_words_fam->num_words);
     return most_words_fam;
 }
 
-/** Return the second to last node of fam_list
- **/
-Family *ret_second_to_last(Family *fam_list){
-    Family *sec_to_last = fam_list;
-    
-    if(sec_to_last->next == NULL){
-        return NULL;
-    }
-    
-    while((sec_to_last->next)->next != NULL){
-        sec_to_last = sec_to_last->next;
-    }
-    return sec_to_last;
-}
 
 /* Deallocate all memory rooted in the List pointed to by fam_list. */
 void deallocate_families(Family *fam_list) {
@@ -226,36 +205,24 @@ void deallocate_families(Family *fam_list) {
     if(head == NULL){
         return;
     }
-    while(ret_second_to_last(head)){
-        Family *sec_to_last = ret_second_to_last(head);
-        Family *last = sec_to_last->next;
-        last->signature = NULL;
-        free(last->signature);
-        for(int i = 0; i < last->max_words+1; i++){
-            char **clearmem = (*last).word_ptrs + sizeof(char*)*i;
-            clearmem = NULL;
-            free(clearmem);
+    while(head->next != NULL){
+        Family *current = fam_list;
+        while(current->next != NULL && (current->next)->next != NULL){
+            current = current->next;
         }
-        last->word_ptrs = NULL;
+        Family *last;
+        if(current->next != NULL){
+            last = current->next;
+        }else{
+            last = current;
+        }
+        for(int i = 0; i < ((int) sizeof(last->word_ptrs)/sizeof(char*)); i++){
+            free(last->word_ptrs[i]);
+        }
         free(last->word_ptrs);
-        last->next = NULL;
-        free(last->next);
-        last = NULL;
         free(last);
-        sec_to_last->next = NULL;
+        current->next = NULL;
     }
-    head->signature = NULL;
-    free(head->signature);
-    for(int i = 0; i < head->max_words+1; i++){
-        char **clearmem = head->word_ptrs + sizeof(char*)*i;
-        clearmem = NULL;
-        free(clearmem);
-    }
-    head->word_ptrs = NULL;
-    free(head->word_ptrs);
-    head->next = NULL;
-    free(head->next);
-    head = NULL;
     free(head);
 }
 //ABOVE A LIKELY SOURCE OF ERRORS
@@ -272,7 +239,6 @@ Family *generate_families(char **word_list, char letter) {
     
     int len_word_list = 0;
     while(word_list[len_word_list] != NULL){
-        //printf("GEN FAM: %s", word_list[len_word_list]);
         len_word_list++;
     }
     
@@ -281,20 +247,16 @@ Family *generate_families(char **word_list, char letter) {
     char *sig;
     
     for(int i = 1; i < len_word_list; i++){
-        if(strlen(word_list[i]) != len_word){
-            continue;
-        }
         sig = generate_word_sig(word_list[i], letter, len_word);
         Family *node = find_family(head, sig);
         if(node == NULL){
             Family *new_Node = new_family(sig);
-            (ret_last_family(head))->next = new_Node;
+            ret_last_family(head)->next = new_Node;
             add_word_to_family(new_Node, word_list[i]);
         }else{
             add_word_to_family(node, word_list[i]);
         }
     }
-    
     return head;
 }
 
@@ -306,8 +268,7 @@ Family *generate_families(char **word_list, char letter) {
    As with fam->word_ptrs, the final pointer should be NULL.
 */
 char **get_new_word_list(Family *fam) {
-    char **new_word_list;
-    new_word_list = malloc(sizeof(*new_word_list)*(fam->num_words));
+    char **new_word_list = malloc(sizeof(char*)*fam->num_words);
     if (new_word_list == NULL){
         perror("Malloc failed line:208 Family.c");
         exit(1);

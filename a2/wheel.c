@@ -13,15 +13,57 @@
    Allocate exactly enough memory to store only those words of length len.
 
    Note: Do not make copies of the words.
+ 
+   DONE
 */
 char **prune_word_list(char **words, int len, int *words_remaining) {
-    return NULL;
+    int i = 0;
+    int size = 1;
+    while(words[i] != NULL){
+        if(strlen(words[i]) == len){
+            size++;
+        }
+        i++;
+    }
+    char **pruned_list = malloc(sizeof(char**)*size);
+    if (pruned_list == NULL){
+        perror("Malloc during prune word list failed Line:28 wheel.c");
+        exit(1);
+    }
+    i = 0;
+    int j = 0;
+    while(words[i] != NULL){
+        if(strlen(words[i]) == len){
+            pruned_list[j] = malloc(sizeof(char*));
+            if (pruned_list[j] == NULL) {
+                perror("Malloc failed while creating space for element of pruned_list Line:37 wheel.c");
+                exit(1);
+            }
+            pruned_list[j] = words[i];
+            j++;
+        }
+        i++;
+    }
+    pruned_list[j] = NULL;
+    j++;
+    if(j != size){
+        fprintf(stderr, "Incorrect number of pruned words!  Line:50 wheel.c");
+        exit(1);
+    }
+    *words_remaining = size - 1;
+    return pruned_list;
 }
-
 
 /* Free memory acquired by prune_word_list.
 */
 void deallocate_pruned_word_list(char **word_list) {
+    char **p = word_list;
+    int i = 0;
+    while(p[i]) {
+        p[i] = NULL;
+        free(p[i]);
+        i++;
+    }
     free(word_list);
 }
 
@@ -40,9 +82,33 @@ void deallocate_pruned_word_list(char **word_list) {
 /* The only printf statements you may use in this function are:
     printf("Length of words to use? ");
     printf("There are no words of that length.\n");
+ 
+    DONE
 */
 char **get_word_list_of_length(char **words, int *len) {
-    return NULL;
+    char buffer[BUF_SIZE];
+    char *nonNumberInput = NULL;
+    char **pruned_list;
+    int chosenLen;
+    while(1)
+    {
+        printf("Length of words to use? ");
+        if(fgets(buffer, BUF_SIZE, stdin)){
+            chosenLen = strtol(buffer, &nonNumberInput, 10);
+            if(strcmp(nonNumberInput, "\n")){
+                continue;
+            }
+            pruned_list = prune_word_list(words, chosenLen, len);
+            if(*len > 0){
+                break;
+            }
+        }else{
+            fprintf(stderr, "\nUser ended input when expecting length of words to play with  Line:98 wheel.c\n");
+            exit(1);
+        }
+    }
+    *len = chosenLen;
+    return pruned_list;
 }
 
 
