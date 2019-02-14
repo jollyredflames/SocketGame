@@ -34,11 +34,6 @@ char **prune_word_list(char **words, int len, int *words_remaining) {
     int j = 0;
     while(words[i] != NULL){
         if(strlen(words[i]) == len){
-            pruned_list[j] = malloc(sizeof(char*));
-            if (pruned_list[j] == NULL) {
-                perror("Malloc failed while creating space for element of pruned_list Line:37 wheel.c");
-                exit(1);
-            }
             pruned_list[j] = words[i];
             j++;
         }
@@ -57,13 +52,6 @@ char **prune_word_list(char **words, int len, int *words_remaining) {
 /* Free memory acquired by prune_word_list.
 */
 void deallocate_pruned_word_list(char **word_list) {
-    char **p = word_list;
-    int i = 0;
-    while(p[i]) {
-        p[i] = NULL;
-        free(p[i]);
-        i++;
-    }
     free(word_list);
 }
 
@@ -99,6 +87,9 @@ char **get_word_list_of_length(char **words, int *len) {
                 continue;
             }
             pruned_list = prune_word_list(words, chosenLen, len);
+            if(*len == 0){
+                printf("There are no words of that length.\n");
+            }
             if(*len > 0){
                 break;
             }
