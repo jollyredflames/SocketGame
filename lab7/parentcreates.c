@@ -12,10 +12,10 @@ int main(int argc, char **argv) {
     }
     
     iterations = strtol(argv[1], NULL, 10);
-    int parentPPID = getpid();
+    int parentPID = getpid();
     for (i = 0; i < iterations; i++) {
         int n = 0;
-        if(parentPPID == getpid()){
+        if(parentPID == getpid()){
             n = fork();
         }
         if (n < 0) {
