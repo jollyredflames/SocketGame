@@ -6,13 +6,6 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 
-void check_file_div(int *words_per_child, int processes){
-    for(int i = 0; i < processes; i++){
-        printf("%i ", words_per_child[i]);
-    }
-    printf("\n");
-}
-
 int main(int argc, char *argv[]) {
     extern char *optarg;
     FILE *infp, *outfp;
@@ -73,11 +66,10 @@ int main(int argc, char *argv[]) {
     
     int words_per_child[processes];
     int total_records = set_up_how_many_records_each_child_reads(words_per_child, processes, infile);
-    //check_file_div(words_per_child, processes); //Uncomment this line to check how many words we expect per child
-    
     int pipe_arr[processes][2];
     int parent_process_id = getpid();
     int child_responsibility = -1; //int representing what "half" of the file this child is responsible for. Set as -1 as default.
+    //check_file_div(words_per_child, processes); //Uncomment this line to check how many words we expect per child
     
     //Set up child processes. Open parent for reading and child for writing for each pipe.
     for(int i = 0; i < processes; i++){
@@ -90,16 +82,13 @@ int main(int argc, char *argv[]) {
             //inside child
             child_responsibility = i;
             //Setup checker to ensure when a write is successful or not
-            
-            
             if (fcntl(pipe_arr[i][1], F_SETFL, O_NONBLOCK) < 0){
                 fprintf(stderr, "Child terminated abnormally\n");
-                exit(0);
+                exit(1);
             }
-            
             if(close(pipe_arr[i][0]) != 0){
                 fprintf(stderr, "Child terminated abnormally\n");
-                exit(0);
+                exit(1);
             }
             break;
         }
@@ -122,22 +111,12 @@ int main(int argc, char *argv[]) {
         
         //need to read words_per_child[child_responsibility] more words from this point in file
         Rec holder[words_per_child[child_responsibility]];
-        
         fread(holder, sizeof(Rec), words_per_child[child_responsibility], infp);
-        
         qsort(holder, words_per_child[child_responsibility], sizeof(Rec), compare_freq);
         //CHECKPOINT: CHILD IS DONE SORTING ITS RESPONSIBILITY OF WORDS
         
-        int x = 0;
-        while(x != words_per_child[child_responsibility]){
-            fprintf(stderr, "CHILD %i: %s, %i\n", child_responsibility, holder[x].word, holder[x].freq);
-            x++;
-        }
-        
         for(int i = 0; i < words_per_child[child_responsibility];){
-            if(write(pipe_arr[child_responsibility][1], &holder[i], sizeof(Rec)) > 0){
-                i++;
-            }
+            if(write(pipe_arr[child_responsibility][1], &holder[i], sizeof(Rec)) > 0){i++;}
         }
         
         if(close(pipe_arr[child_responsibility][1]) != 0){
@@ -157,6 +136,7 @@ int main(int argc, char *argv[]) {
             }
         }
         int count = 0;
+        //actual merge sort. Look through holder, find record with smallest frequency, write it, read from the pipe which last spit out smallest, and repeat.
         while(count < total_records){
             int min = holder[0].freq;
             int pos = 0;
@@ -171,7 +151,7 @@ int main(int argc, char *argv[]) {
             }
             if(fwrite(&holder[pos], sizeof(struct rec), 1, outfp) > 0){
                 count++;
-                fprintf(stdout, "%s %d %d\n", holder[pos].word, holder[pos].freq, count);
+                //fprintf(stdout, "%s %d %d\n", holder[pos].word, holder[pos].freq, count);
             }
             if(read(pipe_arr[pos][0], &holder[pos], sizeof(struct rec)) < 1){
                 //If no data to be read from this pipe, set frequency to -1 so we can stop sorting it.
@@ -181,7 +161,12 @@ int main(int argc, char *argv[]) {
     }
     
     for(int i = 0; i < processes; i++){
+        int stat;
         close(pipe_arr[i][0]);
+        wait(&stat);
+        if(WIFSIGNALED(stat) || WIFSTOPPED(stat)){
+            fprintf(stderr, "Child terminated abnormally\n");
+        }
     }
     
     /* Close both files. */
