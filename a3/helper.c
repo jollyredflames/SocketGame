@@ -45,5 +45,3 @@ int set_up_how_many_records_each_child_reads(int *how_many_records_arr, int proc
     }
     return num_records;
 }
-
-

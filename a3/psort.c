@@ -5,7 +5,6 @@
 #include "helper.c"
 #include <fcntl.h>
 #include <sys/wait.h>
-//#include "tests.c"
 
 void check_file_div(int *words_per_child, int processes){
     for(int i = 0; i < processes; i++){
@@ -82,39 +81,39 @@ int main(int argc, char *argv[]) {
     
     //Set up child processes. Open parent for reading and child for writing for each pipe.
     for(int i = 0; i < processes; i++){
-            if (pipe(pipe_arr[i])==-1){
-                perror("Pipe Failed");
+        if (pipe(pipe_arr[i])==-1){
+            perror("Pipe Failed");
+            exit(1);
+        }
+        int fork_ret = fork();
+        if(fork_ret == 0){
+            //inside child
+            child_responsibility = i;
+            //Setup checker to ensure when a write is successful or not
+            
+            
+            if (fcntl(pipe_arr[i][1], F_SETFL, O_NONBLOCK) < 0){
+                fprintf(stderr, "Child terminated abnormally\n");
+                exit(0);
+            }
+            
+            if(close(pipe_arr[i][0]) != 0){
+                fprintf(stderr, "Child terminated abnormally\n");
+                exit(0);
+            }
+            break;
+        }
+        else{
+            //inside parent
+            if(close(pipe_arr[i][1]) != 0){
+                perror("Failed Closing write end of pipe in parent\n");
                 exit(1);
             }
-            int fork_ret = fork();
-            if(fork_ret == 0){
-                //inside child
-                child_responsibility = i;
-                //Setup checker to ensure when a write is successful or not
-                
-                
-                 if (fcntl(pipe_arr[i][1], F_SETFL, O_NONBLOCK) < 0){
-                 fprintf(stderr, "Child terminated abnormally\n");
-                 exit(0);
-                 }
-                
-                if(close(pipe_arr[i][0]) != 0){
-                    fprintf(stderr, "Child terminated abnormally\n");
-                    exit(0);
-                }
-                break;
-            }
-            else{
-                //inside parent
-                if(close(pipe_arr[i][1]) != 0){
-                    perror("Failed Closing write end of pipe in parent\n");
-                    exit(1);
-                }
         }
     }
     
     if(getpid() != parent_process_id){
-        //do what child is supposed to
+        //Inside Child. Offset input file, read as many records as child is responsible for, sort, then pipe to parent.
         int offset = 0;
         for(int i = 0; i < child_responsibility; i++){
             offset += words_per_child[i];
@@ -149,6 +148,7 @@ int main(int argc, char *argv[]) {
         return 0;
         
     }else{
+        //Inside Parent. Read through each child, then merge sort.
         Rec holder[processes];
         int actual_size = 0;
         for(int i = 0; i < processes; i++){
@@ -166,21 +166,22 @@ int main(int argc, char *argv[]) {
                     pos = r;
                 }
             }
-            if(min == -1){fprintf(stderr, "CUZ BREAK\n"); break;}
+            if(min == -1){
+                break;
+            }
             if(fwrite(&holder[pos], sizeof(struct rec), 1, outfp) > 0){
                 count++;
                 fprintf(stdout, "%s %d %d\n", holder[pos].word, holder[pos].freq, count);
             }
             if(read(pipe_arr[pos][0], &holder[pos], sizeof(struct rec)) < 1){
+                //If no data to be read from this pipe, set frequency to -1 so we can stop sorting it.
                 holder[pos].freq = -1;
             }
         }
     }
     
-    if(parent_process_id == getpid()){
-        for(int closee = 0; closee < processes; closee++){
-            close(pipe_arr[closee][0]);
-        }
+    for(int i = 0; i < processes; i++){
+        close(pipe_arr[i][0]);
     }
     
     /* Close both files. */
@@ -196,3 +197,5 @@ int main(int argc, char *argv[]) {
     
     return 0;
 }
+
+
