@@ -45,3 +45,12 @@ int set_up_how_many_records_each_child_reads(int *how_many_records_arr, int proc
     }
     return num_records;
 }
+
+/*Given a child, return how many bytes from beginning of in file this child should start to read Records from*/
+int getOffset(int child_responsibility, int* words_per_child){
+    int offset = 0;
+    for(int i = 0; i < child_responsibility; i++){
+        offset += words_per_child[i];
+    }
+    return offset;
+}

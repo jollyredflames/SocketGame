@@ -54,21 +54,14 @@ int main(int argc, char *argv[]) {
         return 0;
     }
     
-    if ((infp = fopen(infile, "r")) == NULL) {
-        fprintf(stderr, "Could not open %s\n", infile);
-        exit(1);
-    }
-    if ((outfp = fopen(outfile, "w")) == NULL) {
-        fprintf(stderr, "Could not open %s\n", outfile);
-        exit(1);
-    }
-    //Checkpoint: Have valid input, number of processes cause us to do something, and files opened successfully
+    //Checkpoint: Have valid input and number of processes cause us to do something
     
     int words_per_child[processes];
     int total_records = set_up_how_many_records_each_child_reads(words_per_child, processes, infile);
     int pipe_arr[processes][2];
     int parent_process_id = getpid();
     int child_responsibility = -1; //int representing what "half" of the file this child is responsible for. Set as -1 as default.
+    
     //check_file_div(words_per_child, processes); //Uncomment this line to check how many words we expect per child
     
     //Set up child processes. Open parent for reading and child for writing for each pipe.
@@ -103,19 +96,39 @@ int main(int argc, char *argv[]) {
     
     if(getpid() != parent_process_id){
         //Inside Child. Offset input file, read as many records as child is responsible for, sort, then pipe to parent.
-        int offset = 0;
-        for(int i = 0; i < child_responsibility; i++){
-            offset += words_per_child[i];
+        if ((infp = fopen(infile, "r")) == NULL) {
+            fprintf(stderr, "Could not open %s\n", infile);
+            exit(1);
         }
+        
+        int offset = getOffset(child_responsibility, words_per_child);
         fseek(infp, offset*sizeof(Rec), SEEK_SET);
         
         //need to read words_per_child[child_responsibility] more words from this point in file
         Rec holder[words_per_child[child_responsibility]];
-        fread(holder, sizeof(Rec), words_per_child[child_responsibility], infp);
+        int freadRet = 0;
+        int maxTries = 15;
+        
+        //Try to read records from file maximum of 15 times. If the right number of records are read, do not try to read from file again.
+        do{
+            freadRet = fread(holder, sizeof(Rec), words_per_child[child_responsibility], infp);
+            if(freadRet == words_per_child[child_responsibility]){
+                break;
+            }
+            usleep(5);
+            maxTries--;
+        }while(maxTries > 0);
+        
+        if(freadRet != words_per_child[child_responsibility]){
+            fprintf(stderr, "Reached max amount of fread tries\n");
+            exit(1);
+        }
+        
         qsort(holder, words_per_child[child_responsibility], sizeof(Rec), compare_freq);
-        //CHECKPOINT: CHILD IS DONE SORTING ITS RESPONSIBILITY OF WORDS
+        //CHECKPOINT: CHILD HAS SORTED ARRAY OF WORDS IT IS RESPONSIBLE FOR
         
         for(int i = 0; i < words_per_child[child_responsibility];){
+            //By fcntl if write > 1, write was successful, if not, no bytes will be written to pipe so try write again.
             if(write(pipe_arr[child_responsibility][1], &holder[i], sizeof(Rec)) > 0){i++;}
         }
         
@@ -124,10 +137,15 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
         
+        if (fclose(infp)) {
+            perror("fclose");
+            exit(1);
+        }
+        //Done with child so let child exit with code 0
         return 0;
         
     }else{
-        //Inside Parent. Read through each child, then merge sort.
+        //Inside Parent. Read pipe from each child, then merge sort and print to file.
         Rec holder[processes];
         int actual_size = 0;
         for(int i = 0; i < processes; i++){
@@ -135,15 +153,21 @@ int main(int argc, char *argv[]) {
                 actual_size++;
             }
         }
+        
+        if ((outfp = fopen(outfile, "w")) == NULL) {
+            fprintf(stderr, "Could not open %s\n", outfile);
+            exit(1);
+        }
+        
         int count = 0;
-        //actual merge sort. Look through holder, find record with smallest frequency, write it, read from the pipe which last spit out smallest, and repeat.
+        //actual merge sort. Look through holder, find record with smallest frequency, write it, read from the pipe which last spit out smallest, and repeat. If a frequency is negative, ignore it.
         while(count < total_records){
             int min = holder[0].freq;
             int pos = 0;
-            for(int r = 1; r < actual_size; r++){
-                if((holder[r].freq < min && holder[r].freq > -1) || min == -1){
-                    min = holder[r].freq;
-                    pos = r;
+            for(int i = 1; i < actual_size; i++){
+                if((holder[i].freq < min && holder[i].freq > -1) || min == -1){
+                    min = holder[i].freq;
+                    pos = i;
                 }
             }
             if(min == -1){
@@ -151,15 +175,22 @@ int main(int argc, char *argv[]) {
             }
             if(fwrite(&holder[pos], sizeof(struct rec), 1, outfp) > 0){
                 count++;
-                //fprintf(stdout, "%s %d %d\n", holder[pos].word, holder[pos].freq, count);
+                //fprintf(stdout, "%s %d %d of %i\n", holder[pos].word, holder[pos].freq, count, total_records);
             }
             if(read(pipe_arr[pos][0], &holder[pos], sizeof(struct rec)) < 1){
                 //If no data to be read from this pipe, set frequency to -1 so we can stop sorting it.
                 holder[pos].freq = -1;
             }
         }
+        
+        if (fclose(outfp)) {
+            perror("fclose");
+            exit(1);
+        }
+        
     }
     
+    //Close all pipes. only parent comes here.
     for(int i = 0; i < processes; i++){
         int stat;
         close(pipe_arr[i][0]);
@@ -169,18 +200,9 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    /* Close both files. */
-    if (fclose(infp)) {
-        perror("fclose");
-        exit(1);
-    }
-    
-    if (fclose(outfp)) {
-        perror("fclose");
-        exit(1);
-    }
-    
     return 0;
 }
+
+
 
 
