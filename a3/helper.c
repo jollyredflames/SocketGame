@@ -54,3 +54,28 @@ int getOffset(int child_responsibility, int* words_per_child){
     }
     return offset;
 }
+
+void mergeSortPipeAndWrite(Rec *holder, int processes, int actual_size, int total_records, FILE *outfp, int pipe_arr[processes][2]){
+    int count = 0;
+    while(count < total_records){
+        int min = holder[0].freq;
+        int pos = 0;
+        for(int i = 1; i < actual_size; i++){
+            if((holder[i].freq < min && holder[i].freq > -1) || min == -1){
+                min = holder[i].freq;
+                pos = i;
+            }
+        }
+        if(min == -1){
+            break;
+        }
+        if(fwrite(&holder[pos], sizeof(struct rec), 1, outfp) > 0){
+            count++;
+            //fprintf(stdout, "%s %d %d of %i\n", holder[pos].word, holder[pos].freq, count, total_records);
+        }
+        if(read(pipe_arr[pos][0], &holder[pos], sizeof(struct rec)) < 1){
+            //If no data to be read from this pipe, set frequency to -1 so we can stop sorting it.
+            holder[pos].freq = -1;
+        }
+    }
+}
