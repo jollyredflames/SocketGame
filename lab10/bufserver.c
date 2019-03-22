@@ -34,11 +34,11 @@ int main() {
         int inbuf = 0;           // How many bytes currently in buffer?
         int room = sizeof(buf);  // How many bytes remaining in buffer?
         char *after = buf;       // Pointer to position after the data in buf
-
+        
         int nbytes;
         while ((nbytes = read(fd, after, room)) > 0) {
             // Step 1: update inbuf (how many bytes were just added?)
-
+            inbuf += nbytes;
 
             int where;
 
@@ -55,15 +55,21 @@ int main() {
                 // using print statement below.
                 // Be sure to put a '\0' in the correct place first;
                 // otherwise you'll get junk in the output.
-
-
-                printf("Next message: %s\n", buf);
+                buf[where - 1] = '\0';
+                
+                if(buf[0]=='\n'){
+                    printf("Next message: %s\n", &buf[1]);
+                }else{
+                    printf("Next message: %s\n", buf);
+                }
                 // Note that we could have also used write to avoid having to
                 // put the '\0' in the buffer. Try using write later!
 
                 // Step 4: update inbuf and remove the full line from the buffer
                 // There might be stuff after the line, so don't just do inbuf = 0.
-
+                inbuf = inbuf - where;
+                //memmove(&buf[where], &buf[where+1], inbuf);
+                memmove(buf, &buf[where], inbuf);
                 // You want to move the stuff after the full line to the beginning
                 // of the buffer.  A loop can do it, or you can use memmove.
                 // memmove(destination, source, number_of_bytes)
@@ -71,8 +77,8 @@ int main() {
 
             }
             // Step 5: update after and room, in preparation for the next read.
-
-
+            after = &buf[inbuf];
+            room = sizeof(buf) - inbuf;
         }
         close(fd);
     }
@@ -90,5 +96,11 @@ int main() {
  * Definitely do not use strchr or other string functions to search here. (Why not?)
  */
 int find_network_newline(const char *buf, int n) {
+    int i = 0;
+    for(;i < n; i++){
+        if(buf[i] == '\r'){
+            return ++i;
+        }
+    }
     return -1;
 }
