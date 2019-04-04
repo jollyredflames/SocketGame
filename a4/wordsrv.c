@@ -16,25 +16,129 @@
 
 
 #ifndef PORT
-    #define PORT y
+    #define PORT 57597
 #endif
 #define MAX_QUEUE 5
 
+void announce_turn(struct game_state *game);
+
+void add_client(Game *game, Client *client){
+    client->next = game->head;
+    game->head = client;
+    if(!game->has_next_turn){
+        game->has_next_turn = game->head;
+
+    }
+}
 
 void add_player(struct client **top, int fd, struct in_addr addr);
+
 void remove_player(struct client **top, int fd);
 
-/* These are some of the function prototypes that we used in our solution 
+/*Remove person with file descriptor fd from new_players list*/
+void remove_player_from_new_players_list(struct client **top, int fd){
+    struct client **p;
+    int i = 0;
+    for (p = top; *p && (*p)->fd != fd; p = &(*p)->next, i++);
+    //p now refers to client we want to remove. if it exists
+    
+    if (*p) {
+        struct client *t = (*p)->next;
+        printf("Removing client %d %s from new_players\n", fd, inet_ntoa((*p)->ipaddr));
+        *p = t;
+        if (i == 0){
+            top = p;
+        }
+    } else {
+        fprintf(stderr, "Trying to remove fd %d, but I don't know about it\n",
+                fd);
+    }
+};
+
+/*Return 1 if name is valid else 0 */
+int is_valid_name(Game *game, char *name){
+    Client *curr = game->head;
+    while(curr != NULL){
+        if(!strcmp(name, curr->name)){
+            return 0;
+        }
+        curr = curr->next;
+    }
+    return 1;
+}
+
+/* These are some of the function prototypes that we used in our solution
  * You are not required to write functions that match these prototypes, but
  * you may find the helpful when thinking about operations in your program.
  */
 /* Send the message in outbuf to all clients */
-void broadcast(struct game_state *game, char *outbuf);
-void announce_turn(struct game_state *game);
-void announce_winner(struct game_state *game, struct client *winner);
-/* Move the has_next_turn pointer to the next active client */
-void advance_turn(struct game_state *game);
+void broadcast(struct game_state *game, char *outbuf, Client *not_this_client){
+    Client *curr = game->head;
+    char out[strlen(outbuf)+3];
+    strcpy(out, outbuf);
+    out[strlen(outbuf)] = '\r';
+    out[strlen(outbuf)+1] = '\n';
+    out[strlen(outbuf)+2] = '\0';
+    while(curr != NULL){
+        if(curr == not_this_client){
+            curr = curr->next;
+            continue;
+        }
+        int err = write(curr->fd, out, strlen(out));
+        if(err == -1){
+            //this client has disconnected
+            fprintf(stderr, "Client %s has disconnected; broadcast failed\n", inet_ntoa(curr->ipaddr));
+            remove_player(&game->head, curr->fd);
+        }
+        curr = curr->next;
+    }
+};
 
+/*Announce "It's XXX's turn" where XXX is has_next_turn name. If you are XXX just say 'your'*/
+void announce_turn(struct game_state *game){
+    if(!game->head){
+        return;
+    }
+    if(!game->has_next_turn){
+        if(write((game->head)->fd, "Your guess?\r\n", 13) == -1){
+            fprintf(stderr, "Client %s has disconnected; broadcast failed\n", inet_ntoa((game->head)->ipaddr));
+            remove_player(&game->head, (game->head)->fd);
+        }
+        return;
+    }
+    char longest_possible_str [45];
+    sprintf(longest_possible_str, "It's %s\'s turn", (game->has_next_turn)->name);
+    broadcast(game, longest_possible_str, game->has_next_turn);
+    if(write((game->has_next_turn)->fd, "Your guess?\r\n", 13) == -1){
+        fprintf(stderr, "Client %s has disconnected; broadcast failed\n", inet_ntoa((game->has_next_turn)->ipaddr));
+        remove_player(&game->head, (game->has_next_turn)->fd);
+    }
+};
+
+/* Move the has_next_turn pointer to the next active client */
+void advance_turn(Game *game){
+    if((game->has_next_turn)->next == NULL){
+        game->has_next_turn = game->head;
+        //announce_turn(game);
+        return;
+    }
+    game->has_next_turn = (game->has_next_turn)->next;
+    //announce_turn(game);
+}
+
+void announce_winner(struct game_state *game, struct client *winner){
+    char longest_possible_str [45];
+    sprintf(longest_possible_str, "Player %s won", (game->has_next_turn)->name);
+    advance_turn(game);
+    broadcast(game, longest_possible_str, NULL);
+};
+
+void announce_loss(struct game_state *game){
+    char longest_possible_str [100];
+    sprintf(longest_possible_str, "Boo Hoo Game Ended! The word was %s. Starting new game\r\n", game->word);
+    advance_turn(game);
+    broadcast(game, longest_possible_str, NULL);
+};
 
 /* The set of socket descriptors for select to monitor.
  * This is a global variable because we need to remove socket descriptors
@@ -52,8 +156,9 @@ void add_player(struct client **top, int fd, struct in_addr addr) {
         perror("malloc");
         exit(1);
     }
-
+    
     printf("Adding client %s\n", inet_ntoa(addr));
+    
 
     p->fd = fd;
     p->ipaddr = addr;
@@ -69,11 +174,10 @@ void add_player(struct client **top, int fd, struct in_addr addr) {
  */
 void remove_player(struct client **top, int fd) {
     struct client **p;
-
-    for (p = top; *p && (*p)->fd != fd; p = &(*p)->next)
-        ;
-    // Now, p points to (1) top, or (2) a pointer to another client
-    // This avoids a special case for removing the head of the list
+    int i = 0;
+    for (p = top; *p && (*p)->fd != fd; p = &(*p)->next, i++);
+    //p now refers to client we want to remove. if it exists
+    
     if (*p) {
         struct client *t = (*p)->next;
         printf("Removing client %d %s\n", fd, inet_ntoa((*p)->ipaddr));
@@ -81,6 +185,9 @@ void remove_player(struct client **top, int fd) {
         close((*p)->fd);
         free(*p);
         *p = t;
+        if (i == 0){
+            top = p;
+        }
     } else {
         fprintf(stderr, "Trying to remove fd %d, but I don't know about it\n",
                  fd);
@@ -118,7 +225,7 @@ int main(int argc, char **argv) {
     /* A list of client who have not yet entered their name.  This list is
      * kept separate from the list of active players in the game, because
      * until the new playrs have entered a name, they should not have a turn
-     * or receive broadcast messages.  In other words, they can't play until
+     * or receive broadcast messages. In other words, they can't play until
      * they have a name.
      */
     struct client *new_players = NULL;
@@ -132,8 +239,13 @@ int main(int argc, char **argv) {
     FD_SET(listenfd, &allset);
     // maxfd identifies how far into the set to search
     maxfd = listenfd;
-
     while (1) {
+        
+        char message[MAX_MSG];
+        status_message(message, &game);
+        broadcast(&game, message, NULL);
+        announce_turn(&game);
+        
         // make a copy of the set before we pass it into select
         rset = allset;
         nready = select(maxfd + 1, &rset, NULL, NULL, NULL);
@@ -155,7 +267,7 @@ int main(int argc, char **argv) {
             char *greeting = WELCOME_MSG;
             if(write(clientfd, greeting, strlen(greeting)) == -1) {
                 fprintf(stderr, "Write to client %s failed\n", inet_ntoa(q.sin_addr));
-                remove_player(&(game.head), p->fd);
+                remove_player(&new_players, p->fd);
             };
         }
         
@@ -170,13 +282,97 @@ int main(int argc, char **argv) {
         int cur_fd;
         for(cur_fd = 0; cur_fd <= maxfd; cur_fd++) {
             if(FD_ISSET(cur_fd, &rset)) {
-                // Check if this socket descriptor is an active player
                 
+                // Check if this socket descriptor is an active player
                 for(p = game.head; p != NULL; p = p->next) {
                     if(cur_fd == p->fd) {
-                        //TODO - handle input from an active client
+                        char buf[MAX_MSG] = "";
+                        char data[4] = "";
+                        int read_till_now = 0;
+                        int finished_read = 0;
+                        while(!finished_read){
+                            //CHANGE IF TIME FOR CHITYAPA
+                            int length_of_partial = read(cur_fd, &buf, MAX_MSG);
+                            printf("[%d] Read %d bytes\n", cur_fd, length_of_partial);
+                            if(buf[length_of_partial-1] == '\n'){
+                                printf("[%d] Found newline character\n", cur_fd);
+                                buf[length_of_partial-2] = '\0';
+                                buf[length_of_partial-1] = '\0';
+                                finished_read = 1;
+                            }
+                            read_till_now += length_of_partial;
+                            
+                            if(read_till_now < 4){
+                                strcat(data, buf);
+                            }
+                        }
                         
-                        
+                        if(game.has_next_turn->fd == cur_fd){
+                            int guess_return_code;
+                            
+                            if(strlen(data) == 1){
+                                guess_return_code = update_guess(data[0], &game);
+                            }else{
+                                if(write(cur_fd, "Please enter a single letter!\r\n", 31) == -1){
+                                    fprintf(stderr, "Client %s disconnected after providing an incorrectly formatted string\n", inet_ntoa(p->ipaddr));
+                                    remove_player(&game.head, p->fd);
+                                }
+                                break;
+                            }
+                            char message[100] = "";
+                            switch (guess_return_code) {
+                                case -1:
+                                    printf("Player %s guessed non a-z character\n", p->name);
+                                    strcat(message, "Please Enter a letter between a-z.\r\n");
+                                    break;
+                                case 0:
+                                    printf("Player %s guessed character that was already guessed\n", p->name);
+                                    strcat(message, "Sorry! This letter was already guessed. Please try again\r\n");
+                                    break;
+                                case 1:
+                                    strcat(message, "Wow! You Get to guess again!\r\n");
+                                    break;
+                                case 2:
+                                    sprintf(message, "%c is not in the word\r\n", data[0]);
+                                    advance_turn(&game);
+                                    break;
+                            }
+                            
+                            if(guess_return_code > 0){
+                                char broadcast_guess [50];
+                                printf("Player %s guessed %c\n", p->name, data[0]);
+                                sprintf(broadcast_guess, "%s guesses: %c", (game.has_next_turn)->name, data[0]);
+                                broadcast(&game, broadcast_guess, NULL);
+                            }
+                            
+                            if(guess_return_code == 3){
+                                announce_winner(&game, p);
+                                init_game(&game, argv[1]);
+                                break;
+                            }
+                            
+                            if(guess_return_code == 4){
+                                announce_loss(&game);
+                                init_game(&game, argv[1]);
+                                break;
+                            }
+                            
+                            if(guess_return_code < 3){
+                                if(write(cur_fd, message, strlen(message)) == -1){
+                                    fprintf(stderr, "Client %s disconnected after writing a guess\n", inet_ntoa(p->ipaddr));
+                                    remove_player(&game.head, p->fd);
+                                }
+                                break;
+                            }
+                            
+                            
+                        }else{
+                            printf("Player %s tried guessing out of turn\n", p->name);
+                            if(write(cur_fd, "It is not your turn to guess\r\n", 30) == -1){
+                                fprintf(stderr, "Client %s disconnected after trying to guess out of phase\n", inet_ntoa(p->ipaddr));
+                                remove_player(&game.head, p->fd);
+                            }
+                        }
                         
                         break;
                     }
@@ -185,8 +381,56 @@ int main(int argc, char **argv) {
                 // Check if any new players are entering their names
                 for(p = new_players; p != NULL; p = p->next) {
                     if(cur_fd == p->fd) {
-                        // TODO - handle input from an new client who has
-                        // not entered an acceptable name.
+                        char buf[MAX_MSG] = "";
+                        char name[30] = "";
+                        int successful = 0;
+                        int read_till_now = 0;
+                        int finished_read = 0;
+                        while(!finished_read){
+                            //CHANGE IF TIME FOR CHITYAPA
+                            int length_of_partial = read(cur_fd, &buf, MAX_MSG);
+                            if(buf[length_of_partial-1] == '\n'){
+                                buf[length_of_partial-2] = '\0';
+                                buf[length_of_partial-1] = '\0';
+                                finished_read = 1;
+                            }
+                            read_till_now += length_of_partial;
+                            
+                            if(read_till_now < 29){
+                                strcat(name, buf);
+                                successful = 1;
+                            }
+                            
+                            if(read_till_now > 29 && finished_read){
+                                successful = 0;
+                                if(write(cur_fd, "Names Cannot Be More Than 29 characters!\r\n", 42) == -1){
+                                    fprintf(stderr, "Client %s disconnected after providing a name that was too long\n", inet_ntoa(p->ipaddr));
+                                    remove_player(&new_players, p->fd);
+                                }
+                            }
+                        }
+                        if(successful){
+                            if(is_valid_name(&game, name)){
+                                remove_player_from_new_players_list(&new_players, p->fd);
+                                strcpy(p->name, name);
+                                add_client(&game, p);
+                                char broadcast_joiner [55];
+                                sprintf(broadcast_joiner, "%s has joined the game", name);
+                                broadcast(&game, broadcast_joiner, NULL);
+//                                char message[MAX_MSG];
+//                                status_message(message, &game);
+//                                if(write(cur_fd, message, strlen(message)) == -1){
+//                                    fprintf(stderr, "Client %s disconnected after providing a legal name\n", inet_ntoa(p->ipaddr));
+//                                    remove_player(&game.head, p->fd);
+//                                }
+                            }else{
+                                if(write(cur_fd, "Name already used! Try another one\r\n", 36) == -1){
+                                    fprintf(stderr, "Client %s disconnected after providing a name that was already present\n", inet_ntoa(p->ipaddr));
+                                    remove_player(&new_players, p->fd);
+                                }
+                            }
+                        }
+                        
                         break;
                     } 
                 }

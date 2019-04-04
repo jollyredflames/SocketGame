@@ -75,7 +75,6 @@ void init_game(struct game_state *game, char *dict_name) {
 
 }
 
-
 /* Return the number of lines in the file
  */
 int get_file_length(char *filename) {
@@ -93,4 +92,42 @@ int get_file_length(char *filename) {
     
     fclose(fp);
     return count;
+}
+
+/* Given a letter, update struct game to process the guess. Does not change has_next_turn.
+ Return -1 if letter is not a-z
+ Return 0 if letter was already guessed.
+ Return 1 if letter guessed appeared in word. If it did, update guess.
+ Return 2 if it didnt, then decrement guesses_left.
+ Return 3 if letter guessed completes word.
+ Return 4 if out of guesses
+ */
+int update_guess(char letter, Game *game){
+    if(letter < 97 || letter > 122){
+        return -1;
+    }
+    if(game->letters_guessed[letter - 97]){
+        //If in here, letter has been guessed
+        return 0;
+    }
+    game->letters_guessed[letter - 97] = 1;
+    int guess_appeared = 2;
+    //letter has not been guessed
+    for(int i = 0; i < strlen(game->word); i++){
+        if (game->word[i] == letter){
+            game->guess[i] = letter;
+            guess_appeared = 1;
+        }
+    }
+    if(guess_appeared == 2){
+        game->guesses_left--;
+        if(game->guesses_left == 0){
+            return 4;
+        }
+    }
+    int add = 0;
+    if(strchr(game->guess, '-') == NULL){
+        add = 1;
+    }
+    return guess_appeared + add;
 }

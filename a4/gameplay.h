@@ -8,14 +8,14 @@
 #define NUM_LETTERS 26
 #define WELCOME_MSG "Welcome to our word game. What is your name? "
 
-struct client {
+typedef struct client {
     int fd;
     struct in_addr ipaddr;
     struct client *next;
     char name[MAX_NAME];
     char inbuf[MAX_BUF];  // Used to hold input from the client
     char *in_ptr;         // A pointer into inbuf to help with partial reads
-};
+} Client;
 
 // Information about the dictionary used to pick random word
 struct dictionary {
@@ -23,18 +23,18 @@ struct dictionary {
     int size;
 };
 
-struct game_state {
+typedef struct game_state {
     char word[MAX_WORD];      // The word to guess
     char guess[MAX_WORD];     // The current guess (for example '-o-d')
     int letters_guessed[NUM_LETTERS]; // Index i will be 1 if the corresponding
                                       // letter has been guessed; 0 otherwise
     int guesses_left;         // Number of guesses remaining
     struct dictionary dict;
-    
     struct client *head;
     struct client *has_next_turn;
-};
+} Game;
 
+int update_guess(char letter, Game *game);
 
 void init_game(struct game_state *game, char *dict_name);
 int get_file_length(char *filename);
