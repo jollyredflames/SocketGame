@@ -125,9 +125,12 @@ int update_guess(char letter, Game *game){
             return 4;
         }
     }
-    int add = 0;
-    if(strchr(game->guess, '-') == NULL){
-        add = 1;
+    
+    for(int i = 0; i < strlen(game->guess); i++){
+        if(game->guess[i] == '-'){
+            return guess_appeared;
+        }
     }
-    return guess_appeared + add;
+
+    return 3;
 }
